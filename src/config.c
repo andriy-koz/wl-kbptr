@@ -298,6 +298,27 @@ static int parse_click(void *dest, char *value) {
     return 0;
 }
 
+static int parse_drag_marker_shape(void *dest, char *value) {
+    enum drag_marker_shape *out = dest;
+
+    if (strcmp(value, "circle") == 0) {
+        *out = DRAG_MARKER_CIRCLE;
+    } else if (strcmp(value, "caret") == 0) {
+        *out = DRAG_MARKER_CARET;
+    } else if (strcmp(value, "rectangle") == 0) {
+        *out = DRAG_MARKER_RECTANGLE;
+    } else {
+        LOG_ERR(
+            "Invalid drag marker shape '%s'. Should be 'circle', 'caret' or "
+            "'rectangle'.",
+            value
+        );
+        return 1;
+    }
+
+    return 0;
+}
+
 static void free_home_row_keys(void *field_value) {
     char ***home_row_keys_ptr = field_value;
     if (*home_row_keys_ptr == NULL) {
@@ -354,6 +375,8 @@ struct section_def {
     FIELD(struct mode_click_config, name, default_value, parse, free)
 #define MSCR_FIELD(name, default_value, parse, free) \
     FIELD(struct mode_scroll_config, name, default_value, parse, free)
+#define MD_FIELD(name, default_value, parse, free) \
+    FIELD(struct mode_drag_config, name, default_value, parse, free)
 
 static void noop() {}
 
@@ -418,6 +441,14 @@ static struct section_def section_defs[] = {
     ),
     SECTION(mode_click, MC_FIELD(button, "left", parse_click, noop)),
     SECTION(mode_scroll, MSCR_FIELD(step, "1", parse_double, noop)),
+    SECTION(
+        mode_drag, MD_FIELD(button, "left", parse_click, noop),
+        MD_FIELD(start_marker_color, "#f50d", parse_color, noop),
+        MD_FIELD(start_marker_size, "8", parse_double, noop),
+        MD_FIELD(start_marker_shape, "caret", parse_drag_marker_shape, noop),
+        MD_FIELD(line_color, "#f50a", parse_color, noop),
+        MD_FIELD(motion_steps, "8", parse_double, noop)
+    ),
 };
 #pragma GCC diagnostic pop
 

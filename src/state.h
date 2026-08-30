@@ -39,6 +39,35 @@
 #define MAX_NUM_MODES   3
 #define NO_MODE_ENTERED -1
 
+enum drag_phase {
+    // No drag requested, i.e. `--drag` was not given.
+    DRAG_PHASE_NONE = 0,
+    // Picking the position to press the button at.
+    DRAG_PHASE_START,
+    // Button is held; picking the position to release it at.
+    DRAG_PHASE_TARGET,
+};
+
+/**
+ * A drag keeps a single `zwlr_virtual_pointer_v1` alive from the press to the
+ * release. This is not just tidiness: Hyprland tracks held buttons as
+ * (button, device) pairs, so a release sent from a second virtual pointer is
+ * dropped before it ever reaches the client and the button stays down.
+ */
+struct drag_state {
+    enum drag_phase phase;
+    bool            held;
+    uint32_t        button; // evdev code, e.g. BTN_LEFT (272)
+
+    // Where the button went down, and the last position we moved to.
+    int32_t start_x;
+    int32_t start_y;
+    int32_t x;
+    int32_t y;
+
+    struct zwlr_virtual_pointer_v1 *virt_pointer;
+};
+
 struct mode_interface;
 
 struct tile_mode_state {
@@ -138,6 +167,8 @@ struct state {
     void                          *mode_states[MAX_NUM_MODES];
     int                            current_mode;
     enum click                     click;
+    bool                           only_print;
+    struct drag_state              drag;
 };
 
 #endif

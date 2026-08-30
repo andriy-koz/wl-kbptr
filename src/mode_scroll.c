@@ -130,6 +130,9 @@ static void scroll_mode_free(void *mode_state) {
     free(mode_state);
 }
 
+// Scrolling has no selection state to reset.
+static void scroll_mode_restart(struct state *state, void *mode_state) {}
+
 struct mode_interface scroll_mode_interface = {
     .name    = "scroll",
     .enter   = scroll_mode_enter,
@@ -137,4 +140,5 @@ struct mode_interface scroll_mode_interface = {
     .key     = scroll_mode_key,
     .render  = scroll_mode_render,
     .free    = scroll_mode_free,
+    .restart = scroll_mode_restart,
 };

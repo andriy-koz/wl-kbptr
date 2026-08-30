@@ -16,6 +16,11 @@ struct mode_interface {
     bool (*key)(struct state *, void *mode_state, xkb_keysym_t, char *text);
     void (*render)(struct state *, void *mode_state, cairo_t *);
     void (*free)(void *mode_state);
+
+    // Reset the mode to how it looked when it was entered, keeping whatever
+    // setup would be wasteful to redo (loaded areas, fonts, detected targets).
+    // Used to run the chain a second time for a drag's release point.
+    void (*restart)(struct state *, void *mode_state);
 };
 
 extern struct mode_interface *mode_interfaces[];

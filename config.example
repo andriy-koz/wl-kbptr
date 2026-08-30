@@ -54,3 +54,15 @@ history_border_color=#3339
 
 [mode_click]
 button=left
+
+[mode_scroll]
+step=1
+
+[mode_drag]
+button=left
+start_marker_color=#f50d
+start_marker_size=8
+# Shapes: caret, circle, rectangle
+start_marker_shape=caret
+line_color=#f50a
+motion_steps=8

@@ -3,7 +3,13 @@
 #include "mode.h"
 
 static void *click_mode_enter(struct state *state, struct rect area) {
-    state->click = state->config.mode_click.button;
+    // The configured button is a default, not an override. A button already
+    // picked upstream -- the `n`/`m`/`,` keys of `bisect` and `split` -- is an
+    // explicit choice by the user and has to survive this mode, or a chain
+    // like `bisect,click` can only ever left-click.
+    if (state->click == CLICK_NONE) {
+        state->click = state->config.mode_click.button;
+    }
     enter_next_mode(state, area);
     return NULL;
 }
@@ -23,6 +29,9 @@ click_mode_render(struct state *state, void *mode_state, cairo_t *cairo) {}
 
 static void click_mode_free(void *mode_state) {}
 
+// Nothing to reset: the mode only records which button to use and chains on.
+static void click_mode_restart(struct state *state, void *mode_state) {}
+
 struct mode_interface click_mode_interface = {
     .name    = "click",
     .enter   = click_mode_enter,
@@ -30,4 +39,5 @@ struct mode_interface click_mode_interface = {
     .key     = click_mode_key,
     .render  = click_mode_render,
     .free    = click_mode_free,
+    .restart = click_mode_restart,
 };

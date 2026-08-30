@@ -52,6 +52,34 @@ Just like the `bisect` mode, a left, right and middle click can be made by press
 
 The `click` mode simply triggers a click in the middle of the selection area.
 
+## Drag and drop
+
+The `--drag` flag (or `-d`) holds the button down between two selections instead of clicking once. It works with any mode chain:
+
+```bash
+wl-kbptr -o modes=bisect --drag
+wl-kbptr -o modes=tile,bisect --drag
+```
+
+1. Select a position as usual. The button is pressed there and **stays held**.
+2. The mode chain starts over so you can select where to release it. A marker shows where the button went down, with a line to the pointer.
+3. Selecting the second position releases the button there.
+
+Because the button is held for the whole second selection, the window underneath sees the drag as it happens &mdash; text highlights as you narrow down, a dragged element follows the pointer &mdash; rather than jumping at the end. It also means anything the modes can do in between happens mid-drag, including scrolling with the `scroll` mode to reach a target that is off screen.
+
+`Esc` at any point releases the button back where it was pressed, so an aborted drag drops what it picked up where it picked it up.
+
+The button is whichever one the first selection settled on &mdash; the `n`, `m` and `,` keys for a left, right or middle drag, or a `click` mode in the chain &mdash; falling back to `mode_drag.button` when nothing chose one.
+
+With `--only-print`, no button is pressed; the printed line's click character becomes `d` and it gains the press position as a trailing `+x+y` field.
+
+### Limitations
+
+Dragging is synthesised through the [`wlr-virtual-pointer-unstable-v1`](https://wayland.app/protocols/wlr-virtual-pointer-unstable-v1) protocol, which leaves it at the mercy of how each compositor routes pointer input:
+
+- On compositors using wlroots' data-device implementation (e.g. Sway), a real drag-and-drop &mdash; the kind that moves a file between windows, as opposed to a plain click-drag such as selecting text &mdash; takes a compositor-wide keyboard grab for its duration. The overlay stops receiving keys while that grab is up, so the second selection cannot be made. Plain click-drags are unaffected, and Hyprland's own implementation does not appear to take that grab.
+- Some toolkits only treat a movement as a drag once they have seen enough motion. `mode_drag.motion_steps` sets how many intermediate positions are sent per move; set it to `1` for a single jump.
+
 ## Supported compositors
 
 For `wl-kbptr` to work, it requires the following protocols:

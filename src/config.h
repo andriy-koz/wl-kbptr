@@ -85,6 +85,28 @@ struct mode_scroll_config {
     double step;
 };
 
+enum drag_marker_shape {
+    DRAG_MARKER_CIRCLE,
+    DRAG_MARKER_CARET,
+    DRAG_MARKER_RECTANGLE,
+};
+
+struct mode_drag_config {
+    // Button held for the drag. Overridden for a single run by the click keys
+    // (`n`/`m`/`,`) in the mode that makes the first selection.
+    enum click button;
+
+    uint32_t               start_marker_color;
+    double                 start_marker_size;
+    enum drag_marker_shape start_marker_shape;
+    uint32_t               line_color;
+
+    // Number of intermediate `motion_absolute` events sent per cursor move
+    // while the button is held. Toolkits size up a drag from the motion they
+    // receive, so a single teleport is not always enough to start one.
+    double motion_steps;
+};
+
 struct config {
     struct general_config       general;
     struct mode_tile_config     mode_tile;
@@ -93,6 +115,7 @@ struct config {
     struct mode_split_config    mode_split;
     struct mode_click_config    mode_click;
     struct mode_scroll_config   mode_scroll;
+    struct mode_drag_config     mode_drag;
 };
 
 /**

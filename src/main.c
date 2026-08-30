@@ -15,7 +15,9 @@
 
 #include <cairo/cairo.h>
 #include <dirent.h>
+#include <errno.h>
 #include <getopt.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +30,97 @@
 #include <wayland-util.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
+
+// Set from a signal handler so the main loop can wind down cleanly. This is
+// not just tidiness now that a drag can be in flight: a held button is only
+// ever released by us, so exiting without doing it leaves the whole session
+// with a stuck mouse button. `SIGTERM` in particular is routine -- it is how a
+// newly launched instance replaces this one.
+static volatile sig_atomic_t interrupted     = 0;
+static int                   signal_pipe[2]  = {-1, -1};
+
+static void handle_interrupt(int signal) {
+    interrupted = 1;
+
+    // Wake the main loop. A flag on its own is not enough: libwayland's
+    // `wl_display_poll()` retries on `EINTR`, so a signal never breaks
+    // `wl_display_dispatch()` out of its poll and the flag would not be looked
+    // at again until some unrelated event arrived. With a button held down
+    // that is the difference between releasing it and leaving the session with
+    // a stuck mouse button.
+    if (signal_pipe[1] != -1) {
+        const uint8_t byte = 1;
+        ssize_t       ignored = write(signal_pipe[1], &byte, 1);
+        (void)ignored;
+    }
+}
+
+static void install_signal_handlers(void) {
+    if (pipe(signal_pipe) != 0) {
+        LOG_ERR("Could not create the signal pipe.");
+        signal_pipe[0] = signal_pipe[1] = -1;
+    }
+
+    struct sigaction sa = {.sa_handler = handle_interrupt};
+    sigemptyset(&sa.sa_mask);
+
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
+}
+
+/**
+ * Dispatch Wayland events until we are done or a signal arrives.
+ *
+ * This is `wl_display_dispatch()` split open so the poll can watch the signal
+ * pipe alongside the display fd -- see `handle_interrupt()` for why waiting
+ * inside libwayland's own poll is not good enough.
+ */
+static void run_event_loop(struct state *state) {
+    struct wl_display *display = state->wl_display;
+
+    while (state->running && !interrupted) {
+        while (wl_display_prepare_read(display) != 0) {
+            if (wl_display_dispatch_pending(display) == -1) {
+                return;
+            }
+        }
+
+        if (wl_display_flush(display) == -1 && errno != EAGAIN) {
+            wl_display_cancel_read(display);
+            return;
+        }
+
+        struct pollfd fds[] = {
+            {.fd = wl_display_get_fd(display), .events = POLLIN},
+            {.fd = signal_pipe[0],             .events = POLLIN},
+        };
+        const int num_fds = signal_pipe[0] == -1 ? 1 : 2;
+
+        if (poll(fds, num_fds, -1) == -1) {
+            wl_display_cancel_read(display);
+            if (errno == EINTR) {
+                continue;
+            }
+            return;
+        }
+
+        if (num_fds > 1 && fds[1].revents != 0) {
+            wl_display_cancel_read(display);
+            return;
+        }
+
+        if (!(fds[0].revents & POLLIN)) {
+            wl_display_cancel_read(display);
+            continue;
+        }
+
+        if (wl_display_read_events(display) == -1 ||
+            wl_display_dispatch_pending(display) == -1) {
+            return;
+        }
+    }
+}
 
 // Ensure only a single wl-kbptr instance drives the pointer at a time. If
 // another instance is already running, terminate it so a new launch replaces
@@ -724,7 +817,7 @@ static struct output *find_output_by_name(struct state *state, char *name) {
 }
 
 static void print_result(struct state *state) {
-    char click;
+    char click = 'n';
     switch (state->click) {
     case CLICK_LEFT_BTN:
         click = 'l';
@@ -735,8 +828,24 @@ static void print_result(struct state *state) {
     case CLICK_RIGHT_BTN:
         click = 'r';
         break;
+    case CLICK_DRAG:
+        click = 'd';
+        break;
     case CLICK_NONE:
         click = 'n';
+    }
+
+    // The area is where the button is released. A drag adds where it was
+    // pressed as a trailing field; every other run prints exactly what it
+    // always has.
+    if (state->click == CLICK_DRAG) {
+        printf(
+            "%dx%d+%d+%d +%d+%d %c +%d+%d\n", state->result.w, state->result.h,
+            state->result.x, state->result.y, state->current_output->x,
+            state->current_output->y, click, state->drag.start_x,
+            state->drag.start_y
+        );
+        return;
     }
 
     printf(
@@ -757,6 +866,7 @@ static void print_usage() {
     puts(" -o, --option        set configuration option");
     puts(" -O, --output        specify display output to use");
     puts(" -p, --only-print    only print, don't move the cursor or click");
+    puts(" -d, --drag          hold the button down between two selections");
 }
 
 static void print_version() {
@@ -806,6 +916,7 @@ int main(int argc, char **argv) {
         {"config", required_argument, 0, 'c'},
         {"output", required_argument, 0, 'O'},
         {"only-print", no_argument, 0, 'p'},
+        {"drag", no_argument, 0, 'd'},
         {NULL, 0, NULL, 0}
     };
 
@@ -818,7 +929,7 @@ int main(int argc, char **argv) {
     char  *selected_output_name = NULL;
     bool   only_print           = false;
     while ((option_char = getopt_long(
-                argc, argv, "hvr:o:c:O:Rp", long_options, &option_index
+                argc, argv, "hvr:o:c:O:Rpd", long_options, &option_index
             )) != -1) {
         switch (option_char) {
         case 'h':
@@ -868,6 +979,12 @@ int main(int argc, char **argv) {
             only_print = true;
             break;
 
+        case 'd':
+            // The chain runs twice: once to pick where to press, once to pick
+            // where to release.
+            state.drag.phase = DRAG_PHASE_START;
+            break;
+
         default:
             LOG_ERR("Unknown argument.");
             config_free_values(&state.config);
@@ -902,8 +1019,11 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    state.only_print = only_print;
+
     // Replace any already-running instance so we never stack overlays.
     if (!only_print) {
+        install_signal_handlers();
         terminate_other_instances();
     }
 
@@ -1027,7 +1147,7 @@ int main(int argc, char **argv) {
     wl_surface_set_input_region(state.wl_surface, wl_region);
 
     wl_surface_commit(state.wl_surface);
-    while (state.running && wl_display_dispatch(state.wl_display)) {}
+    run_event_loop(&state);
 
     wp_viewport_destroy(state.wp_viewport);
 
@@ -1042,14 +1162,28 @@ int main(int argc, char **argv) {
     if (state.result.x != -1) {
         print_result(&state);
         if (!only_print) {
-            move_pointer(
-                &state, state.result.x + state.result.w / 2,
-                state.result.y + state.result.h / 2, state.click
-            );
+            if (state.click == CLICK_DRAG) {
+                // The overlay is gone by now, so the release lands on the
+                // window underneath without any grab to work around.
+                drag_end(
+                    &state, state.result.x + state.result.w / 2,
+                    state.result.y + state.result.h / 2
+                );
+            } else {
+                move_pointer(
+                    &state, state.result.x + state.result.w / 2,
+                    state.result.y + state.result.h / 2, state.click
+                );
+            }
         }
     } else {
         status_code = state.config.general.cancellation_status_code;
     }
+
+    // Cancelled part way through a drag -- `Esc`, a signal, a mode that never
+    // entered. Put the button back down where it was picked up rather than
+    // leaving the seat with it held.
+    drag_abort(&state);
 
     if (state.wl_virtual_pointer_mgr != NULL) {
         zwlr_virtual_pointer_manager_v1_destroy(state.wl_virtual_pointer_mgr);

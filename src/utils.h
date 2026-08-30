@@ -18,6 +18,11 @@ enum click {
     CLICK_LEFT_BTN,
     CLICK_RIGHT_BTN,
     CLICK_MIDDLE_BTN,
+
+    // Not a button: marks a completed drag so the result is reported as one.
+    // Never passed to `move_pointer()` -- the button actually held during a
+    // drag is kept in `state.drag.button`.
+    CLICK_DRAG,
 };
 
 int max(int a, int b);

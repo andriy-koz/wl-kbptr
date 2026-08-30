@@ -155,18 +155,50 @@ static void load_home_row(
     struct xkb_keymap *keymap, char **home_row, char *home_row_buffer
 ) {
     static const xkb_keycode_t key_codes[] = {
+        // Selection keys (25), laid out as a contiguous 5x5 grid that mirrors
+        // the keyboard: each screen row is a contiguous run of 5 keyboard
+        // keys, with each keyboard row wrapped across two screen rows (left
+        // half / right half). The bottom-right keys (n m , . /) are left out.
+        //   q w e r t
+        //   y u i o p
+        //   a s d f g
+        //   h j k l ;
+        //   z x c v b
+        0x18, // q
+        0x19, // w
+        0x1a, // e
+        0x1b, // r
+        0x1c, // t
+        0x1d, // y
+        0x1e, // u
+        0x1f, // i
+        0x20, // o
+        0x21, // p
         0x26, // a
         0x27, // s
         0x28, // d
         0x29, // f
+        0x2a, // g
+        0x2b, // h
         0x2c, // j
         0x2d, // k
         0x2e, // l
-        0x2f, // m
-        0x2a, // g
-        0x2b, // h
+        0x2f, // ;
+        0x34, // z
+        0x35, // x
+        0x36, // c
+        0x37, // v
         0x38, // b
+        // Click keys (3) - the otherwise-unused bottom-right keys.
+        0x39, // n (left)
+        0x3a, // m (right)
+        0x3b, // , (middle)
     };
+
+    _Static_assert(
+        sizeof(key_codes) / sizeof(key_codes[0]) == HOME_ROW_LEN_WITH_BTN,
+        "key_codes must provide exactly HOME_ROW_LEN_WITH_BTN keys"
+    );
 
     struct xkb_state *xkb_state = xkb_state_new(keymap);
 
@@ -693,8 +725,11 @@ int main(int argc, char **argv) {
         .fractional_scale     = 0,
         .result               = (struct rect){-1, -1, -1, -1},
         .initial_area         = (struct rect){-1, -1, -1, -1},
-        .home_row = (char *[]){"", "", "", "", "", "", "", "", "", "", ""},
-        .click    = CLICK_NONE,
+        .home_row =
+            (char *[]){"", "", "", "", "", "", "", "", "", "",
+                       "", "", "", "", "", "", "", "", "", "",
+                       "", "", "", "", "", "", "", ""},
+        .click = CLICK_NONE,
     };
 
     config_set_default(&state.config);

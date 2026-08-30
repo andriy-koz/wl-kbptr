@@ -37,6 +37,27 @@ enum bisect_division {
      */
     DIVISION_4,
     /*
+     * For most areas we divide into a 5x5 grid to give more choices per step
+     * and therefore fewer key presses to reach the target. The grid is laid
+     * out as a contiguous block of the keyboard: each screen row is a
+     * contiguous run of 5 keyboard keys, with each keyboard row wrapped across
+     * two screen rows (left half / right half). The bottom-right keys
+     * (n m , . /) are intentionally left out.
+     *
+     *  +--+--+--+--+--+
+     *  | 0| 1| 2| 3| 4|
+     *  +--+--+--+--+--+
+     *  | 5| 6| 7| 8| 9|
+     *  +--+--+--+--+--+
+     *  |10|11|12|13|14|
+     *  +--+--+--+--+--+
+     *  |15|16|17|18|19|
+     *  +--+--+--+--+--+
+     *  |20|21|22|23|24|
+     *  +--+--+--+--+--+
+     */
+    DIVISION_25,
+    /*
      * Once we have divide the areas enough times, we will end up with a line,
      * i.e. a area with a width or height of a single pixel. In this case we
      * divide the area in two.
@@ -95,7 +116,16 @@ static enum bisect_division determine_division(struct rect *area) {
         return DIVISION_HORIZONTAL;
     }
 
-    return area->w > area->h * DIVIDE_8_RATIO ? DIVISION_8 : DIVISION_4;
+    // Below 5px in either direction the 5x5 grid would produce zero-width or
+    // zero-height cells, so fall back to the 2x2 split.
+    if (area->w < 5 || area->h < 5) {
+        return DIVISION_4;
+    }
+
+    // Otherwise divide into the 5x5 grid, which mirrors the keyboard layout
+    // and gives 25 choices per step. Very thin areas fall through to the
+    // 2-way splits handled above.
+    return DIVISION_25;
 }
 
 struct division_interface {
@@ -113,6 +143,17 @@ struct division_interface {
     );
 };
 
+struct division_metrics {
+    int columns;
+    int rows;
+};
+
+static const struct division_metrics division_metrics[] = {
+    [DIVISION_8]  = {4, 2},
+    [DIVISION_4]  = {2, 2},
+    [DIVISION_25] = {5, 5},
+};
+
 static void division_4_or_8_render(
     enum bisect_division division, struct state *state,
     struct bisect_mode_state *ms, cairo_t *cairo
@@ -120,19 +161,24 @@ static void division_4_or_8_render(
     struct mode_bisect_config *config = &state->config.mode_bisect;
     struct rect               *area   = &ms->areas[ms->current];
 
-    bool divide_8 = division == DIVISION_8;
-
-    const int sub_area_columns = divide_8 ? 4 : 2;
-    const int sub_area_rows    = 2;
+    const int sub_area_columns = division_metrics[division].columns;
+    const int sub_area_rows    = division_metrics[division].rows;
 
     const int sub_area_width      = area->w / sub_area_columns;
     const int sub_area_width_off  = area->w % sub_area_columns;
     const int sub_area_height     = area->h / sub_area_rows;
     const int sub_area_height_off = area->h % sub_area_rows;
 
-    const bool inner_labels = config->label_font_size < sub_area_height;
+    // The 5x5 grid always labels cells in place: its top/bottom label fallback
+    // only makes sense for a 2-row split. Instead of enforcing the configured
+    // minimum font size (which would overflow the cells a few steps in), the
+    // label is scaled to fit the cell in both directions.
+    const bool inner_labels = division == DIVISION_25 ||
+                              config->label_font_size < sub_area_height;
     const int  font_size =
-        max(min(512, sub_area_height * .9), config->label_font_size);
+        division == DIVISION_25
+            ? max(6, min(512, min(sub_area_height * .9, sub_area_width * .8)))
+            : max(min(512, sub_area_height * .9), config->label_font_size);
 
     cairo_set_font_face(cairo, ms->label_font_face);
     cairo_set_font_size(cairo, font_size);
@@ -178,18 +224,14 @@ static void division_4_or_8_render(
     if (!inner_labels) {
         cairo_set_font_size(cairo, config->label_font_size);
         cairo_set_source_u32(cairo, config->label_color);
-        char label[64];
+        char label[256];
 
         // Top label
-        if (divide_8) {
+        snprintf(label, sizeof(label), "%s", state->home_row[0]);
+        for (int i = 1; i < sub_area_columns; i++) {
             snprintf(
-                label, sizeof(label), "%s %s %s %s", state->home_row[0],
-                state->home_row[1], state->home_row[2], state->home_row[3]
-            );
-        } else {
-            snprintf(
-                label, sizeof(label), "%s %s", state->home_row[0],
-                state->home_row[1]
+                label + strlen(label), sizeof(label) - strlen(label), " %s",
+                state->home_row[i]
             );
         }
 
@@ -202,15 +244,11 @@ static void division_4_or_8_render(
         cairo_show_text(cairo, label);
 
         // Bottom label
-        if (divide_8) {
+        snprintf(label, sizeof(label), "%s", state->home_row[sub_area_columns]);
+        for (int i = 1; i < sub_area_columns; i++) {
             snprintf(
-                label, sizeof(label), "%s %s %s %s", state->home_row[4],
-                state->home_row[5], state->home_row[6], state->home_row[7]
-            );
-        } else {
-            snprintf(
-                label, sizeof(label), "%s %s", state->home_row[2],
-                state->home_row[3]
+                label + strlen(label), sizeof(label) - strlen(label), " %s",
+                state->home_row[sub_area_columns + i]
             );
         }
 
@@ -226,13 +264,12 @@ static void division_4_or_8_render(
 static bool division_4_or_8_idx_to_rect(
     enum bisect_division division, int idx, struct rect *area, struct rect *rect
 ) {
-    bool divide_8 = division == DIVISION_8;
-    if (!divide_8 && idx >= 4) {
+    const int sub_area_columns = division_metrics[division].columns;
+    const int sub_area_rows    = division_metrics[division].rows;
+
+    if (idx >= sub_area_columns * sub_area_rows) {
         return false;
     }
-
-    const int sub_area_columns = divide_8 ? 4 : 2;
-    const int sub_area_rows    = 2;
 
     const int sub_area_width      = area->w / sub_area_columns;
     const int sub_area_width_off  = area->w % sub_area_columns;
@@ -377,6 +414,9 @@ static const struct division_interface division_interfaces[] = {
         {.render          = division_4_or_8_render,
          .idx_to_sub_area = division_4_or_8_idx_to_rect},
     [DIVISION_4] =
+        {.render          = division_4_or_8_render,
+         .idx_to_sub_area = division_4_or_8_idx_to_rect},
+    [DIVISION_25] =
         {.render          = division_4_or_8_render,
          .idx_to_sub_area = division_4_or_8_idx_to_rect},
     [DIVISION_VERTICAL] =

@@ -21,12 +21,12 @@
 #include <xkbcommon/xkbcommon.h>
 
 #define NO_AREA_SELECTION     -1
-#define HOME_ROW_LEN          8
-#define HOME_ROW_LEN_WITH_BTN 11
+#define HOME_ROW_LEN          25
+#define HOME_ROW_LEN_WITH_BTN 28
 #define HOME_ROW_BUFFER_LEN   128
-#define HOME_ROW_LEFT_CLICK   8
-#define HOME_ROW_RIGHT_CLICK  9
-#define HOME_ROW_MIDDLE_CLICK 10
+#define HOME_ROW_LEFT_CLICK   25
+#define HOME_ROW_RIGHT_CLICK  26
+#define HOME_ROW_MIDDLE_CLICK 27
 
 // This should cover a initial maximum area with a width and height of 65536
 // pixels.

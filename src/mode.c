@@ -81,6 +81,12 @@ void enter_next_mode(struct state *state, struct rect area) {
 }
 
 bool has_last_mode_returned(struct state *state) {
+    // No mode has been entered yet, so the last one cannot have returned.
+    // Guarding here also keeps us from indexing `mode_interfaces[-1]`.
+    if (state->current_mode == NO_MODE_ENTERED) {
+        return false;
+    }
+
     return state->current_mode >= MAX_NUM_MODES ||
            state->mode_interfaces[state->current_mode] == NULL;
 }
@@ -119,7 +125,8 @@ void free_mode_states(struct state *state) {
 }
 
 bool mode_handle_key(struct state *state, xkb_keysym_t sym, char *text) {
-    if (has_last_mode_returned(state)) {
+    if (state->current_mode == NO_MODE_ENTERED ||
+        has_last_mode_returned(state)) {
         return false;
     }
 
@@ -128,7 +135,8 @@ bool mode_handle_key(struct state *state, xkb_keysym_t sym, char *text) {
     );
 }
 void mode_render(struct state *state, cairo_t *cairo) {
-    if (has_last_mode_returned(state)) {
+    if (state->current_mode == NO_MODE_ENTERED ||
+        has_last_mode_returned(state)) {
         return;
     }
 

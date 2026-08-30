@@ -257,6 +257,14 @@ static void handle_keyboard_key(
     xkb_keysym_to_utf8(key_sym, text, sizeof(text));
 
     if (key_state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        // Escape always quits, even before a mode has been entered. The
+        // overlay holds an exclusive keyboard grab, so without this a failure
+        // to enter a mode would leave it undismissable.
+        if (key_sym == XKB_KEY_Escape) {
+            seat->state->running = false;
+            return;
+        }
+
         bool redraw = mode_handle_key(seat->state, key_sym, text);
         if (has_last_mode_returned(seat->state)) {
             seat->state->running = false;

@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
+
+# Like wl-kbptr-sway-active-win but for Hyprland. Restricts wl-kbptr to the
+# currently focused window's geometry so modes (e.g. scroll) act on it.
+
+rect=$(hyprctl activewindow -j | jq -r '"\(.size[0])x\(.size[1])+\(.at[0])+\(.at[1])"')
+
+wl-kbptr --restrict "$rect" $@

@@ -9,4 +9,11 @@ void move_pointer(
     struct state *state, uint32_t x, uint32_t y, enum click click
 );
 
+/**
+ * Scroll at (x, y) by `notches` mouse-wheel clicks. Negative scrolls up/left.
+ */
+void scroll_pointer(
+    struct state *state, uint32_t axis, int32_t notches, uint32_t x, uint32_t y
+);
+
 #endif

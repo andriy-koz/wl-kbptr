@@ -352,6 +352,8 @@ struct section_def {
     FIELD(struct mode_split_config, name, default_value, parse, free)
 #define MC_FIELD(name, default_value, parse, free) \
     FIELD(struct mode_click_config, name, default_value, parse, free)
+#define MSCR_FIELD(name, default_value, parse, free) \
+    FIELD(struct mode_scroll_config, name, default_value, parse, free)
 
 static void noop() {}
 
@@ -415,6 +417,7 @@ static struct section_def section_defs[] = {
         MS_FIELD(history_border_color, "#3339", parse_color, noop)
     ),
     SECTION(mode_click, MC_FIELD(button, "left", parse_click, noop)),
+    SECTION(mode_scroll, MSCR_FIELD(step, "1", parse_double, noop)),
 };
 #pragma GCC diagnostic pop
 

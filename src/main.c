@@ -168,31 +168,41 @@ static void load_home_row(
         0x38, // b
     };
 
-    struct xkb_state *xkb_state   = xkb_state_new(keymap);
-    char             *buffer      = home_row_buffer;
-    size_t            buffer_size = HOME_ROW_BUFFER_LEN;
+    struct xkb_state *xkb_state = xkb_state_new(keymap);
+
+    // Build into scratch space first. A seat's keymap can change while we run
+    // (any virtual-keyboard client, e.g. wtype or an on-screen keyboard, swaps
+    // it for its own minimal one), and such a keymap will not map every key we
+    // need. In that case keep the mapping we already have rather than tearing
+    // the process down.
+    char   scratch[HOME_ROW_BUFFER_LEN];
+    size_t offsets[HOME_ROW_LEN_WITH_BTN];
+    char  *buffer      = scratch;
+    size_t buffer_size = HOME_ROW_BUFFER_LEN;
 
     for (int i = 0; i < sizeof(key_codes) / sizeof(key_codes[0]); i++) {
         xkb_keysym_t keysym =
             xkb_state_key_get_one_sym(xkb_state, key_codes[i]);
         int char_len = xkb_keysym_to_utf8(keysym, buffer, buffer_size);
-        if (char_len < 0) {
-            LOG_ERR("Could not load home row keys. Buffer is too small.");
-            exit(1);
-        }
 
-        if (char_len == 0) {
-            LOG_ERR(
-                "0x%x symkey does not have a UTF-8 representation in given "
-                "keymap.",
+        if (char_len <= 0) {
+            LOG_WARN(
+                "Keycode 0x%x has no UTF-8 representation in the given "
+                "keymap; keeping the previous home row keys.",
                 key_codes[i]
             );
-            exit(1);
+            xkb_state_unref(xkb_state);
+            return;
         }
 
-        home_row[i]  = buffer;
+        offsets[i]   = buffer - scratch;
         buffer      += char_len;
         buffer_size -= char_len;
+    }
+
+    memcpy(home_row_buffer, scratch, buffer - scratch);
+    for (int i = 0; i < HOME_ROW_LEN_WITH_BTN; i++) {
+        home_row[i] = home_row_buffer + offsets[i];
     }
 
     xkb_state_unref(xkb_state);

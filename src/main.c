@@ -14,16 +14,78 @@
 #include "xdg-output-unstable-v1-client-protocol.h"
 
 #include <cairo/cairo.h>
+#include <dirent.h>
 #include <getopt.h>
+#include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <wayland-util.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
+
+// Ensure only a single wl-kbptr instance drives the pointer at a time. If
+// another instance is already running, terminate it so a new launch replaces
+// the old overlay instead of stacking a second one on top of it. This is also
+// the recovery path if an instance ever gets stuck: launching wl-kbptr again
+// dismisses it.
+static void terminate_other_instances(void) {
+    pid_t killed[64];
+    int   n_killed = 0;
+
+    DIR *proc = opendir("/proc");
+    if (proc == NULL) {
+        return;
+    }
+
+    const pid_t self = getpid();
+    struct dirent *ent;
+    while ((ent = readdir(proc)) != NULL) {
+        if (ent->d_name[0] < '0' || ent->d_name[0] > '9') {
+            continue;
+        }
+
+        pid_t pid = (pid_t)atoi(ent->d_name);
+        if (pid <= 0 || pid == self) {
+            continue;
+        }
+
+        char path[64];
+        snprintf(path, sizeof(path), "/proc/%d/comm", pid);
+        FILE *f = fopen(path, "r");
+        if (f == NULL) {
+            continue;
+        }
+
+        // `comm` holds the bare, newline-terminated executable name. Match it
+        // exactly so we spare the `wl-kbptr-*-active-win` helper scripts.
+        char name[64];
+        bool is_us = fgets(name, sizeof(name), f) != NULL &&
+                     (name[strcspn(name, "\n")] = '\0',
+                      strcmp(name, "wl-kbptr") == 0);
+        fclose(f);
+
+        if (is_us && kill(pid, SIGTERM) == 0 &&
+            n_killed < (int)(sizeof(killed) / sizeof(killed[0]))) {
+            killed[n_killed++] = pid;
+        }
+    }
+    closedir(proc);
+
+    // Wait (up to ~500ms each) for them to actually exit before we bring up
+    // our own layer surface, so the compositor is not tearing down the old
+    // overlay while it maps ours.
+    for (int i = 0; i < n_killed; i++) {
+        for (int t = 0; t < 50 && kill(killed[i], 0) == 0; t++) {
+            usleep(10000);
+        }
+    }
+}
 
 static void send_frame(struct state *state) {
     int32_t scale_120 = state->fractional_scale;
@@ -838,6 +900,11 @@ int main(int argc, char **argv) {
     if (load_modes(&state, state.config.general.modes) != 0) {
         LOG_ERR("Could not load modes.");
         return 1;
+    }
+
+    // Replace any already-running instance so we never stack overlays.
+    if (!only_print) {
+        terminate_other_instances();
     }
 
     wl_list_init(&state.outputs);

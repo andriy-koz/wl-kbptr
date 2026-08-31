@@ -91,6 +91,11 @@ wl-kbptr --version                # sanity check
   `wl-kbptr-sway-active-win` (active window). Cannot be tested headlessly here.
 - **No compositor reload needed** — `wl-kbptr` is spawned fresh on each keypress.
   If an old instance is on screen, press `Escape` to exit it, then relaunch.
+- **Build is without OpenCV.** Do not put `mode_floating.source=detect` in
+  `~/.config/wl-kbptr/config`: the config then fails to parse (`Binary not
+  build with OpenCV. 'detect' source not supported.`) and wl-kbptr exits
+  before any `-o` override is applied, so keybindings launch nothing. See
+  `SCROLL_MODE_NOTES.md` §5.
 - If you get "text file busy" on `cp`, ensure no `wl-kbptr` process is running
   (`pgrep -fa wl-kbptr`) and retry.
 

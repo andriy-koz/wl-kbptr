@@ -276,6 +276,15 @@ the overlay can never become undismissable regardless of mode state.
 ## 5. Things to remember
 - Hyprland, not Sway → the Sway helper (`wl-kbptr-sway-active-win`) does **not**
   work here; use `wl-kbptr-hypr-active-win` (hyprctl-based).
+- The binary is built **without OpenCV** (`meson setup build --buildtype=release`,
+  no `-Dopencv=enabled`). Any `mode_floating.source=detect` in
+  `~/.config/wl-kbptr/config` makes the **whole config fail to parse** —
+  `err: Binary not build with OpenCV. 'detect' source not supported.` — and
+  wl-kbptr exits before `-o` overrides are applied, so keybindings appear dead
+  (no overlay). Symptoms: `timeout 5 wl-kbptr -o modes=bisect,click` prints the
+  OpenCV error and exits 1. Fix: keep the config OpenCV-free (e.g. default
+  `modes=bisect,click`); OpenCV-dependent settings only via a separate config
+  passed with `-c`, or rebuild with `-Dopencv=enabled`.
 - Scroll is a **live** mode now. The overlay's pointer capture is solved by
   dropping the exclusive grab around the axis send plus a one-pixel cursor
   nudge (§1/§2 Bug B). Keep that whole sequence to a single roundtrip.

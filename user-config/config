@@ -1,0 +1,9 @@
+# Keep this OpenCV-free: `source=detect` makes the whole config fail to parse
+# with a non-OpenCV build. See ~/src/wl-kbptr/SCROLL_MODE_NOTES.md.
+
+[general]
+modes=bisect,click
+
+[mode_scroll]
+step=1
+fast_step=3

@@ -9,15 +9,17 @@
 
 ## 0. Quick orientation
 
-- **Repo**: `~/Projects/wl-kbptr` (local copy of `moverest/wl-kbptr` v0.4.1).
+- **Repo**: `~/src/wl-kbptr` (local copy of `moverest/wl-kbptr` v0.4.1).
 - **Installed binary**: `~/.local/bin/wl-kbptr` (this is what keybindings launch; verify with `which -a wl-kbptr`).
 - **Compositor**: Hyprland **0.56.2** (NOT Sway). `swaymsg` does **not** exist; use `hyprctl`.
 - **User config**: `~/.config/wl-kbptr/config` (`modes=tile,bisect` originally; scroll added).
+  A copy is tracked in `user-config/config`; restore with
+  `cp user-config/config ~/.config/wl-kbptr/config`.
 - **Hypr config**: `~/.config/hypr/` (Lua files: `bindings.lua`, `input.lua`, ...).
 
 ### Build / install / test
 ```bash
-cd ~/Projects/wl-kbptr
+cd ~/src/wl-kbptr
 meson compile -C build
 pkill -x wl-kbptr; sleep 0.3
 rm -f ~/.local/bin/wl-kbptr && cp build/wl-kbptr ~/.local/bin/wl-kbptr
@@ -78,13 +80,20 @@ Keybindings:
 - `CTRL + NTILDE` → `wl-kbptr -o modes=bisect,click` (unchanged, worked before).
 - `SUPER + NTILDE` → `~/Projects/wl-kbptr/helpers/wl-kbptr-hypr-active-win -o modes=scroll,click` (scrolls the active window's center).
 
-Scroll keys: `J`/`K` = down/up, `H`/`L` = left/right. `Esc` quit,
+Scroll keys: `J`/`K` = down/up, `H`/`L` = left/right, `D`/`U` = fast
+down/up. `Esc` quit,
 `BackSpace` back, `Enter`/`Space` next mode.
 
 ### `mode_scroll.step` — scroll magnitude
-`step` is the number of **mouse-wheel notches** sent per keypress (default 1,
-currently `3` in `~/.config/wl-kbptr/config`). Config-only: no rebuild needed,
-and `-o mode_scroll.step=N` overrides it for one run.
+`step` is the number of **mouse-wheel notches** sent per `J`/`K`/`H`/`L`
+press (default 1, currently `1` in `~/.config/wl-kbptr/config`).
+`fast_step` is the same for `D`/`U` (default 3, currently `3`). Config-only: no
+rebuild needed, and `-o mode_scroll.step=N` / `-o mode_scroll.fast_step=N`
+override them for one run.
+
+Fast scroll deliberately uses its own keys, not Shift+`J`/`K`: each scroll
+drops the keyboard grab, so the window below gets keyboard focus with Shift
+still held and treats the wheel as horizontal scroll (tried; nothing moved).
 
 `scroll_pointer()` emits `step` *separate* notch frames rather than one event
 with `discrete = step` — some clients count the latter as a single click. The

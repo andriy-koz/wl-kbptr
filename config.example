@@ -56,7 +56,9 @@ history_border_color=#3339
 button=left
 
 [mode_scroll]
+# Wheel notches per keypress: step for j/k/h/l, fast_step for d/u.
 step=1
+fast_step=3
 
 [mode_drag]
 button=left

@@ -83,6 +83,7 @@ struct mode_click_config {
 
 struct mode_scroll_config {
     double step;
+    double fast_step;
 };
 
 enum drag_marker_shape {

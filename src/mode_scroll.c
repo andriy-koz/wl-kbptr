@@ -31,10 +31,17 @@ static bool scroll_mode_key(
 ) {
     struct scroll_mode_state *ms = mode_state;
 
-    // `step` is the number of wheel notches sent per keypress.
+    // `step` is the number of wheel notches sent per keypress; `d`/`u` send
+    // `fast_step` instead. Not Shift: each scroll briefly gives keyboard focus
+    // back to the window below, which would see Shift held and scroll
+    // horizontally.
     int32_t step = (int32_t)lround(state->config.mode_scroll.step);
     if (step < 1) {
         step = 1;
+    }
+    int32_t fast_step = (int32_t)lround(state->config.mode_scroll.fast_step);
+    if (fast_step < 1) {
+        fast_step = 1;
     }
 
     const uint32_t x = ms->area.x + ms->area.w / 2;
@@ -66,6 +73,16 @@ static bool scroll_mode_key(
         scroll_pointer(state, WL_POINTER_AXIS_VERTICAL_SCROLL, -step, x, y);
         return true;
 
+    case XKB_KEY_d:
+        scroll_pointer(state, WL_POINTER_AXIS_VERTICAL_SCROLL, fast_step, x, y);
+        return true;
+
+    case XKB_KEY_u:
+        scroll_pointer(
+            state, WL_POINTER_AXIS_VERTICAL_SCROLL, -fast_step, x, y
+        );
+        return true;
+
     case XKB_KEY_h:
     case XKB_KEY_H:
         scroll_pointer(state, WL_POINTER_AXIS_HORIZONTAL_SCROLL, -step, x, y);
@@ -92,7 +109,7 @@ scroll_mode_render(struct state *state, void *mode_state, cairo_t *cairo) {
     cairo_set_operator(cairo, CAIRO_OPERATOR_OVER);
 
     const char *lines[] = {
-        "Scroll mode  (J↓ K↑  H← L→)",
+        "Scroll mode  (J↓ K↑  H← L→  fast: D↓ U↑)",
         "Esc quit · BackSpace back · Enter next",
     };
 
